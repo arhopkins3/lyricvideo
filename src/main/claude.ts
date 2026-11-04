@@ -5,6 +5,7 @@ import type { GenerateTextRequest, GenerateTextResult, LyricSearchQuery } from '
 import { newId, type Line, type LyricCandidate, type TranslationCandidate } from '../shared/types'
 import { getApiKey, getModel } from './settings'
 import { log, progress } from './events'
+import { fetchLyricsPage, hasLyricLines } from './lyricsPage'
 
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01'
 
@@ -102,7 +103,7 @@ const LyricCandidatesSchema = z.object({
       url: z.string().describe('URL the lyrics were taken from, empty if unknown'),
       title: z.string(),
       artist: z.string(),
-      lyrics: z.string().describe('Complete Farsi lyrics in Persian script, one line per line, no translations'),
+      lyrics: z.string().describe('Farsi lyrics in Persian script, one line per line, if you reproduce them; otherwise an empty string'),
       notes: z.string().describe('How this version differs from others, completeness, trustworthiness'),
       confidence: z.enum(['high', 'medium', 'low'])
     })
@@ -110,9 +111,9 @@ const LyricCandidatesSchema = z.object({
 })
 
 const LYRICS_SYSTEM = `You are a research assistant inside a desktop app that builds Farsi karaoke videos for language learners.
-Your job is to find the authentic Persian-script lyrics of a song. Search several sources (lyric sites, music databases, fan pages, the artist's own channels), fetch the pages that look promising and compare them.
-Keep the lyrics exactly as written in Persian script. Do not translate, do not transliterate, do not add commentary inside the lyrics. Preserve the line breaks used in the song. Include repeated choruses in full so the lines can be timed against the audio.
-If different sources disagree (different verses, different ordering, different spellings), keep them as separate candidates so the user can choose.`
+Your job is to find web pages that carry the authentic Persian-script lyrics of a song. Search several sources (lyric sites, music databases, fan pages, the artist's own channels), fetch the pages that look promising and compare them: completeness, whether repeated choruses are written out, spelling quality, whether the page is the official or best-known source.
+The app downloads the chosen page itself and extracts the lyric lines locally, so you do not need to reproduce the lyrics; report the exact page URL of each version instead. If you can quote the lyrics, do so in Persian script with one lyric line per line; if you choose not to, leave the lyrics field empty and the app will use the page.
+If different sources disagree (different verses, different ordering, different spellings), report them as separate candidates so the user can choose.`
 
 export async function searchLyrics(query: LyricSearchQuery): Promise<LyricCandidate[]> {
   const parts = [
@@ -130,21 +131,38 @@ export async function searchLyrics(query: LyricSearchQuery): Promise<LyricCandid
     'lyrics',
     LYRICS_SYSTEM,
     transcript,
-    'Now return every distinct version of the lyrics you found as structured candidates. Each candidate must contain the complete lyrics in Persian script with one lyric line per line. Order by confidence.',
+    'Now return every distinct version of the lyrics you found as structured candidates, each with the exact URL of its page. Put the lyrics in Persian script, one lyric line per line, in the lyrics field when you reproduce them; otherwise leave that field empty. Order by confidence.',
     LyricCandidatesSchema
   )
-  progress({ task: 'lyrics', fraction: 1, message: `Found ${out.candidates.length} candidate(s)`, done: true })
-  return out.candidates.map((c) => ({
-    id: newId(),
-    source: c.source,
-    url: c.url || undefined,
-    title: c.title,
-    artist: c.artist,
-    text: c.lyrics.trim(),
-    notes: c.notes,
-    confidence: c.confidence
-  }))
+  const candidates: LyricCandidate[] = []
+  for (const c of out.candidates) {
+    let text = c.lyrics.trim()
+    let notes = c.notes
+    if (!hasLyricLines(text) && c.url) {
+      progress({ task: 'lyrics', fraction: -1, message: `Fetching lyrics from ${c.source}…` })
+      try {
+        text = await fetchLyricsPage(c.url)
+        notes = `Lyrics extracted from the page by the app. ${notes}`
+      } catch (err) {
+        notes = `${notes} (Could not extract the lyrics automatically: ${(err as Error).message})`
+      }
+    }
+    candidates.push({
+      id: newId(),
+      source: c.source,
+      url: c.url || undefined,
+      title: c.title,
+      artist: c.artist,
+      text,
+      notes,
+      confidence: c.confidence
+    })
+  }
+  progress({ task: 'lyrics', fraction: 1, message: `Found ${candidates.length} candidate(s)`, done: true })
+  return candidates
 }
+
+export { fetchLyricsPage }
 
 // ---------------------------------------------------------------- Transliteration / translation
 

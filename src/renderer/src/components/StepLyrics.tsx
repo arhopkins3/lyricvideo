@@ -42,6 +42,22 @@ export default function StepLyrics(): JSX.Element {
     setText(c.text)
   }
 
+  const [fetching, setFetching] = useState<string | null>(null)
+  const fetchFromPage = async (id: string) => {
+    const c = p.lyricCandidates.find((x) => x.id === id)
+    if (!c?.url) return
+    setFetching(id)
+    const text = await guarded(() => window.api.claude.fetchLyricsPage(c.url!))
+    setFetching(null)
+    if (text) {
+      updateProject((pr) => ({
+        ...pr,
+        lyricCandidates: pr.lyricCandidates.map((x) => (x.id === id ? { ...x, text, notes: 'Lyrics extracted from the page by the app.' } : x))
+      }))
+      setPreview(id)
+    }
+  }
+
   const apply = () => updateProject((pr) => ({ ...pr, lines: mergeLines(pr.lines, text) }))
   const dirtyText = text.trim() !== p.lines.map((l) => l.fa).join('\n').trim()
 
@@ -80,7 +96,7 @@ export default function StepLyrics(): JSX.Element {
                     <b>{c.source}</b> <span className={`pill ${c.confidence ?? ''}`}>{c.confidence}</span>
                     <div className="muted small">
                       {c.title}
-                      {c.artist ? ` — ${c.artist}` : ''} · {c.text.split('\n').length} lines
+                      {c.artist ? ` — ${c.artist}` : ''} · {c.text.trim() ? `${c.text.split('\n').length} lines` : 'no lyrics text yet'}
                     </div>
                   </div>
                   <div className="row">
@@ -89,10 +105,15 @@ export default function StepLyrics(): JSX.Element {
                         Source ↗
                       </button>
                     )}
+                    {c.url && (
+                      <button className="btn small" onClick={() => fetchFromPage(c.id)} disabled={fetching === c.id} title="Download the page and extract the lyric lines">
+                        {fetching === c.id ? 'Fetching…' : 'Fetch from page'}
+                      </button>
+                    )}
                     <button className="btn small" onClick={() => setPreview(preview === c.id ? null : c.id)}>
                       {preview === c.id ? 'Hide' : 'Preview'}
                     </button>
-                    <button className="btn small primary" onClick={() => useCandidate(c.id)}>
+                    <button className="btn small primary" onClick={() => useCandidate(c.id)} disabled={!c.text.trim()}>
                       Use this
                     </button>
                   </div>

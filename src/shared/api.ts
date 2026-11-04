@@ -66,6 +66,8 @@ export interface RendererApi {
   }
   claude: {
     searchLyrics(projectId: string, query: LyricSearchQuery): Promise<LyricCandidate[]>
+    /** Download a lyric page and extract its Persian-script lyric lines locally. */
+    fetchLyricsPage(url: string): Promise<string>
     generateText(req: GenerateTextRequest): Promise<GenerateTextResult>
     searchTranslations(
       projectId: string,

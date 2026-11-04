@@ -29,6 +29,7 @@ const api: RendererApi = {
   },
   claude: {
     searchLyrics: (id, q) => invoke('claude:searchLyrics', id, q),
+    fetchLyricsPage: (url) => invoke('claude:fetchLyricsPage', url),
     generateText: (req) => invoke('claude:generateText', req),
     searchTranslations: (id, lines, q) => invoke('claude:searchTranslations', id, lines, q),
     explainLine: (req) => invoke('claude:explainLine', req),

@@ -157,6 +157,7 @@ function registerIpc(): void {
   ipcMain.handle('project:recent', () => recentProjects())
 
   ipcMain.handle('claude:searchLyrics', (_e, _id: string, q: LyricSearchQuery) => claude.searchLyrics(q))
+  ipcMain.handle('claude:fetchLyricsPage', (_e, url: string) => claude.fetchLyricsPage(url))
   ipcMain.handle('claude:generateText', (_e, req: GenerateTextRequest) => claude.generateText(req))
   ipcMain.handle('claude:searchTranslations', (_e, _id: string, lines: Line[], q: LyricSearchQuery) =>
     claude.searchTranslations(lines, q)
