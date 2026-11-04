@@ -44,17 +44,18 @@ The packaged app is unsigned; on first launch right-click the app and choose Ope
 
 1. **Source** – title/artist, Finglish conventions for this project.
 2. **Lyrics** – "Search the web with Claude" returns candidate lyrics with sources. Pick one or paste your own. The editor is one line per lyric line; lines are split into words on spaces.
-3. **Translate** – generate Finglish + English, search the web for published translations, and ask for a meaning explanation per line or for the whole song. Every cell is editable. A Finglish line gets per-word highlighting when it has exactly one token per Farsi word.
+3. **Translate** – one button, "Generate everything with Claude", produces the Finglish, the English, an explanation of every line, a short gloss for every word and an overview of the song, and stores all of it in the project. It only fills what is missing, so you can re-run it after editing lyrics; the "More…" menu regenerates individual parts or searches the web for published translations. Every cell is editable. A Finglish line gets per-word highlighting when it has exactly one token per Farsi word.
 4. **Align** – "Auto-align words" runs the Python aligner (faster-whisper transcription in Farsi matched to the lyric words). Then adjust:
    - drag or resize line blocks on the waveform (words scale with the line),
    - drag word boundaries in the line strip, or set a word's start/end to the playhead,
    - **Tap mode**: play the song and hold `Enter` (or `T`) for the duration of each word (or each line), release when it ends.
    - nudge a line, or everything from a line onwards, by 0.1 s.
    Space toggles playback everywhere; the speed selector slows the song down for learning.
-5. **Style** – live preview of the frame. Choose which scripts are shown, fonts, sizes, colours, highlight mode, position, and the background (solid, gradient, image, or the original video with dim/blur).
-6. **Export** – renders one PNG per word change with the same canvas renderer used for the preview, and ffmpeg composites them over the background and muxes the audio into an H.264 MP4.
+5. **Play** – the learning player: the video preview with the current line's Farsi, Finglish, English, word glosses and explanation following the playhead. Click a line to jump to it, pin a line to keep its notes while the song continues, replay a line, and slow the song down from the transport bar.
+6. **Style** – live preview of the frame. Choose which scripts are shown, fonts, sizes, colours, highlight mode, position, and the background (solid, gradient, image, or the original video with dim/blur).
+7. **Export** – renders one PNG per word change with the same canvas renderer used for the preview, and ffmpeg composites them over the background and muxes the audio into an H.264 MP4.
 
-Save with ⌘S. The `.lvproj` is a zip of `project.json`, `audio.mp3`, `video.mp4` (if any) and the background image.
+Save with ⌘S. The `.lvproj` is a zip of `project.json` (lyrics, timing, Finglish, English, glosses, explanations, style), `audio.mp3`, `video.mp4` (if any) and the background image.
 
 ## Automatic alignment
 

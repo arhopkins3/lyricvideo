@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
-import type { GenerateTextRequest, GenerateTextResult, LyricSearchQuery } from '../shared/api'
+import type { ExplainLinesResult, GenerateTextRequest, GenerateTextResult, LyricSearchQuery } from '../shared/api'
 import { newId, type Line, type LyricCandidate, type TranslationCandidate } from '../shared/types'
 import { getApiKey, getModel } from './settings'
 import { log, progress } from './events'
@@ -323,6 +323,80 @@ export async function explainLine(req: { lines: Line[]; lineId: string; title?: 
   assertNotRefused(msg)
   progress({ task: 'explain', fraction: 1, message: 'Done', done: true })
   return textOf(msg).trim()
+}
+
+const ExplainLinesSchema = z.object({
+  lines: z.array(
+    z.object({
+      index: z.number().int().describe('Index of the line as numbered in the request'),
+      explanation: z.string().describe('What the line means to a native speaker: idioms, imagery, register, cultural references, useful grammar'),
+      words: z.array(
+        z.object({
+          index: z.number().int().describe('0-based index of the word within the line'),
+          gloss: z.string().describe('Short English meaning of this word as used here, 1-4 words, e.g. "my heart", "is tight (longs)"')
+        })
+      )
+    })
+  )
+})
+
+/** Explain lines in batches with the whole song as context, and gloss every word. */
+export async function explainLines(req: {
+  lines: Line[]
+  lineIds: string[]
+  title?: string
+  artist?: string
+}): Promise<ExplainLinesResult> {
+  const anthropic = client()
+  const wanted = req.lines.filter((l) => req.lineIds.includes(l.id))
+  const result: ExplainLinesResult = { lines: [] }
+  if (wanted.length === 0) return result
+  const songText = req.lines.map((l, i) => `${i}: ${l.fa}${l.en ? `  —  ${l.en}` : ''}`).join('\n')
+  const CHUNK = 10
+  for (let offset = 0; offset < wanted.length; offset += CHUNK) {
+    const slice = wanted.slice(offset, offset + CHUNK)
+    progress({
+      task: 'explain',
+      fraction: offset / wanted.length,
+      message: `Explaining lines ${offset + 1}–${offset + slice.length} of ${wanted.length}…`
+    })
+    const ask = slice
+      .map((l) => {
+        const i = req.lines.indexOf(l)
+        return `${i}: ${l.words.map((w, wi) => `[${wi}] ${w.fa}`).join(' ')}`
+      })
+      .join('\n')
+    const msg = await anthropic.beta.messages.parse({
+      model: getModel(),
+      max_tokens: 32000,
+      system: EXPLAIN_SYSTEM,
+      betas: [FALLBACK_BETA],
+      fallbacks: 'default',
+      output_config: { effort: 'medium', format: betaZodOutputFormat(ExplainLinesSchema) },
+      messages: [
+        {
+          role: 'user',
+          content: `${req.title ? `Song: ${req.title}` : ''}${req.artist ? ` by ${req.artist}` : ''}\n\nFull lyrics for context (line number: Farsi — English):\n${songText}\n\nExplain these lines (line number: words with their indices). For each line give the explanation and a short gloss for every word index listed:\n${ask}`
+        }
+      ]
+    })
+    assertNotRefused(msg)
+    const parsed = msg.parsed_output
+    if (!parsed) throw new Error('Claude returned no structured result. Try again.')
+    for (const item of parsed.lines) {
+      const line = req.lines[item.index]
+      if (!line || !slice.includes(line)) continue
+      result.lines.push({
+        id: line.id,
+        explanation: item.explanation.trim(),
+        words: item.words
+          .filter((w) => line.words[w.index])
+          .map((w) => ({ id: line.words[w.index].id, gloss: w.gloss.trim() }))
+      })
+    }
+  }
+  progress({ task: 'explain', fraction: 1, message: 'Done', done: true })
+  return result
 }
 
 export async function explainSong(req: { lines: Line[]; title?: string; artist?: string }): Promise<string> {

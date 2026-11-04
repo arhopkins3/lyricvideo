@@ -6,6 +6,7 @@ import StepSource from './components/StepSource'
 import StepLyrics from './components/StepLyrics'
 import StepText from './components/StepText'
 import StepAlign from './components/StepAlign'
+import StepPlay from './components/StepPlay'
 import StepStyle from './components/StepStyle'
 import StepExport from './components/StepExport'
 import Transport from './components/Transport'
@@ -129,6 +130,7 @@ export default function App(): JSX.Element {
             {step === 'lyrics' && <StepLyrics />}
             {step === 'text' && <StepText />}
             {step === 'align' && <StepAlign />}
+            {step === 'play' && <StepPlay />}
             {step === 'style' && <StepStyle />}
             {step === 'export' && <StepExport />}
           </>

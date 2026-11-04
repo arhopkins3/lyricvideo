@@ -9,14 +9,15 @@ import type {
 } from '../../shared/types'
 import { player } from './lib/player'
 
-export type Step = 'source' | 'lyrics' | 'text' | 'align' | 'style' | 'export'
+export type Step = 'source' | 'lyrics' | 'text' | 'align' | 'play' | 'style' | 'export'
 export const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'source', label: '1 · Source' },
   { id: 'lyrics', label: '2 · Lyrics' },
   { id: 'text', label: '3 · Translate' },
   { id: 'align', label: '4 · Align' },
-  { id: 'style', label: '5 · Style' },
-  { id: 'export', label: '6 · Export' }
+  { id: 'play', label: '5 · Play' },
+  { id: 'style', label: '6 · Style' },
+  { id: 'export', label: '7 · Export' }
 ]
 
 interface AppState {

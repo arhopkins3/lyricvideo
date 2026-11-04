@@ -164,6 +164,7 @@ function registerIpc(): void {
   )
   ipcMain.handle('claude:explainLine', (_e, req) => claude.explainLine(req))
   ipcMain.handle('claude:explainSong', (_e, req) => claude.explainSong(req))
+  ipcMain.handle('claude:explainLines', (_e, req) => claude.explainLines(req))
 
   ipcMain.handle('align:run', (_e, id: string, lines: Line[], options) => runAlignment(id, lines, options))
   ipcMain.handle('align:cancel', () => cancelAlignment())

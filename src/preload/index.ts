@@ -33,7 +33,8 @@ const api: RendererApi = {
     generateText: (req) => invoke('claude:generateText', req),
     searchTranslations: (id, lines, q) => invoke('claude:searchTranslations', id, lines, q),
     explainLine: (req) => invoke('claude:explainLine', req),
-    explainSong: (req) => invoke('claude:explainSong', req)
+    explainSong: (req) => invoke('claude:explainSong', req),
+    explainLines: (req) => invoke('claude:explainLines', req)
   },
   align: {
     run: (id, lines, options) => invoke('align:run', id, lines, options ?? {}),

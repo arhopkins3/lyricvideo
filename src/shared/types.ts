@@ -8,6 +8,8 @@ export interface Word {
   fa: string
   /** Finglish transliteration of this word. */
   finglish?: string
+  /** Short English meaning of this word in context (for the learning player). */
+  gloss?: string
   /** Start time in seconds (undefined until aligned). */
   start?: number
   /** End time in seconds. */

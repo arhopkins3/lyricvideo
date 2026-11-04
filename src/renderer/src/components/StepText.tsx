@@ -16,24 +16,28 @@ export default function StepText(): JSX.Element {
   const [showCandidates, setShowCandidates] = useState(false)
   const canUseClaude = Boolean(settings?.hasApiKey) && p.lines.length > 0
 
-  const generate = async (what: 'finglish' | 'english' | 'both', onlyEmpty: boolean) => {
-    const lines = p.lines.filter((l) =>
+  /** Latest project state (the enrich pipeline runs several steps and must not use a stale closure). */
+  const current = () => useStore.getState().handle!.project
+
+  const generate = async (what: 'finglish' | 'english' | 'both', onlyEmpty: boolean): Promise<boolean> => {
+    const pr0 = current()
+    const lines = pr0.lines.filter((l) =>
       !onlyEmpty ? true : what === 'english' ? !l.en : what === 'finglish' ? !l.finglish : !l.en || !l.finglish
     )
-    if (lines.length === 0) return
+    if (lines.length === 0) return true
     setBusy('text')
     const res = await guarded(() =>
       window.api.claude.generateText({
-        projectId: p.id,
+        projectId: pr0.id,
         lines,
         what,
-        conventions: p.finglishConventions,
-        title: p.title,
-        artist: p.artist
+        conventions: pr0.finglishConventions,
+        title: pr0.title,
+        artist: pr0.artist
       })
     )
     setBusy(null)
-    if (!res) return
+    if (!res) return false
     updateProject((pr) => ({
       ...pr,
       lines: pr.lines.map((l) => {
@@ -48,6 +52,51 @@ export default function StepText(): JSX.Element {
         return next
       })
     }))
+    return true
+  }
+
+  const explainAll = async (onlyMissing: boolean): Promise<boolean> => {
+    const pr0 = current()
+    const lineIds = pr0.lines.filter((l) => !onlyMissing || !l.explanation).map((l) => l.id)
+    if (lineIds.length === 0) return true
+    setBusy('explain')
+    const res = await guarded(() => window.api.claude.explainLines({ lines: pr0.lines, lineIds, title: pr0.title, artist: pr0.artist }))
+    setBusy(null)
+    if (!res) return false
+    updateProject((pr) => ({
+      ...pr,
+      lines: pr.lines.map((l) => {
+        const r = res.lines.find((x) => x.id === l.id)
+        if (!r) return l
+        return {
+          ...l,
+          explanation: r.explanation,
+          words: l.words.map((w) => ({ ...w, gloss: r.words.find((x) => x.id === w.id)?.gloss ?? w.gloss }))
+        }
+      })
+    }))
+    return true
+  }
+
+  const explainSongIfMissing = async (force: boolean): Promise<boolean> => {
+    if (!force && current().songExplanation) return true
+    setBusy('song')
+    const text = await guarded(() => {
+      const pr0 = current()
+      return window.api.claude.explainSong({ lines: pr0.lines, title: pr0.title, artist: pr0.artist })
+    })
+    setBusy(null)
+    if (!text) return false
+    updateProject((pr) => ({ ...pr, songExplanation: text }))
+    return true
+  }
+
+  /** One click: transliteration + translation, then every line's meaning and word glosses, then the song overview. */
+  const enrichAll = async (force: boolean) => {
+    setBusy('all')
+    const ok = (await generate('both', !force)) && (await explainAll(!force)) && (await explainSongIfMissing(force))
+    setBusy(null)
+    if (ok) useStore.getState().setNotice('All metadata generated and stored in the project. Save (⌘S) to keep it in the package.')
   }
 
   const searchTranslations = async () => {
@@ -85,13 +134,7 @@ export default function StepText(): JSX.Element {
   }
 
   const explainSong = async () => {
-    setBusy('song')
-    const text = await guarded(() => window.api.claude.explainSong({ lines: p.lines, title: p.title, artist: p.artist }))
-    setBusy(null)
-    if (text) {
-      updateProject((pr) => ({ ...pr, songExplanation: text }))
-      setShowSong(true)
-    }
+    if (await explainSongIfMissing(true)) setShowSong(true)
   }
 
   const setField = (lineId: string, field: 'finglish' | 'en', value: string) =>
@@ -105,26 +148,35 @@ export default function StepText(): JSX.Element {
       <div className="row between wrap">
         <h2>Transliteration, translation &amp; meaning</h2>
         <div className="row wrap">
-          <button className="btn primary" disabled={!canUseClaude || !!busy} onClick={() => generate('both', true)}>
-            Generate missing Finglish + English
+          <button className="btn primary" disabled={!canUseClaude || !!busy} onClick={() => enrichAll(false)} title="Finglish, English, every line's meaning with word glosses, and the song overview — only what is still missing">
+            {busy === 'all' ? 'Generating…' : 'Generate everything with Claude'}
           </button>
-          <button className="btn" disabled={!canUseClaude || !!busy} onClick={() => generate('both', false)}>
-            Regenerate all
-          </button>
-          <button className="btn" disabled={!canUseClaude || !!busy} onClick={() => generate('finglish', false)}>
-            Finglish only
-          </button>
-          <button className="btn" disabled={!canUseClaude || !!busy} onClick={() => generate('english', false)}>
-            English only
-          </button>
-          <button className="btn" disabled={!canUseClaude || !!busy} onClick={searchTranslations}>
-            Search web for translations
-          </button>
-          <button className="btn" disabled={!canUseClaude || !!busy} onClick={explainSong}>
-            {p.songExplanation ? 'Re-explain song' : 'Explain the song'}
-          </button>
+          <details className="more-actions">
+            <summary className="btn small ghost">More…</summary>
+            <div className="row wrap">
+              <button className="btn small" disabled={!canUseClaude || !!busy} onClick={() => enrichAll(true)}>
+                Regenerate everything
+              </button>
+              <button className="btn small" disabled={!canUseClaude || !!busy} onClick={() => generate('finglish', false)}>
+                Finglish only
+              </button>
+              <button className="btn small" disabled={!canUseClaude || !!busy} onClick={() => generate('english', false)}>
+                English only
+              </button>
+              <button className="btn small" disabled={!canUseClaude || !!busy} onClick={() => explainAll(false)}>
+                Re-explain all lines
+              </button>
+              <button className="btn small" disabled={!canUseClaude || !!busy} onClick={explainSong}>
+                {p.songExplanation ? 'Re-explain song' : 'Explain the song'}
+              </button>
+              <button className="btn small" disabled={!canUseClaude || !!busy} onClick={searchTranslations}>
+                Search web for translations
+              </button>
+            </div>
+          </details>
         </div>
       </div>
+      <MetaSummary />
       <ProgressBar task="text" />
       <ProgressBar task="translations" />
       <ProgressBar task="explain" />
@@ -270,6 +322,16 @@ function LineRows(props: {
         <tr className="explanation-row">
           <td></td>
           <td colSpan={4}>
+            {l.words.some((w) => w.gloss) && (
+              <div className="gloss-row">
+                {l.words.map((w) => (
+                  <span key={w.id} className="gloss-chip">
+                    <span className="rtl">{w.fa}</span>
+                    <small>{w.gloss ?? '…'}</small>
+                  </span>
+                ))}
+              </div>
+            )}
             <Markdown text={l.explanation} />
             <button className="link small" onClick={props.onExplain} disabled={!props.canExplain}>
               Regenerate explanation
@@ -278,5 +340,28 @@ function LineRows(props: {
         </tr>
       )}
     </>
+  )
+}
+
+function MetaSummary(): JSX.Element {
+  const p = useStore((s) => s.handle!.project)
+  const n = p.lines.length
+  const count = (f: (l: import('../../../shared/types').Line) => boolean) => p.lines.filter(f).length
+  const items = [
+    ['Finglish', count((l) => !!l.finglish)],
+    ['English', count((l) => !!l.en)],
+    ['Line meanings', count((l) => !!l.explanation)],
+    ['Word glosses', count((l) => l.words.length > 0 && l.words.every((w) => !!w.gloss))]
+  ] as const
+  return (
+    <div className="meta-summary">
+      {items.map(([label, c]) => (
+        <span key={label} className={`pill ${c === n && n > 0 ? 'high' : c > 0 ? 'medium' : ''}`}>
+          {label} {c}/{n}
+        </span>
+      ))}
+      <span className={`pill ${p.songExplanation ? 'high' : ''}`}>Song overview {p.songExplanation ? '✓' : '–'}</span>
+      <span className="muted small">All of this is stored in the project and travels with the .lvproj package.</span>
+    </div>
   )
 }

@@ -37,6 +37,10 @@ export interface GenerateTextResult {
   }>
 }
 
+export interface ExplainLinesResult {
+  lines: Array<{ id: string; explanation: string; words: Array<{ id: string; gloss: string }> }>
+}
+
 /** The API surface exposed to the renderer as `window.api`. */
 export interface RendererApi {
   settings: {
@@ -81,6 +85,8 @@ export interface RendererApi {
       artist?: string
     }): Promise<string>
     explainSong(req: { lines: Line[]; title?: string; artist?: string }): Promise<string>
+    /** Explain many lines in batches and gloss every word; returns only the lines that were requested. */
+    explainLines(req: { lines: Line[]; lineIds: string[]; title?: string; artist?: string }): Promise<ExplainLinesResult>
   }
   align: {
     run(projectId: string, lines: Line[], options?: { model?: string; separate?: boolean }): Promise<AlignmentResult>
