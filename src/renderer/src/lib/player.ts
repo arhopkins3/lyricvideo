@@ -4,11 +4,17 @@
  */
 type Listener = () => void
 
+export interface Loop {
+  start: number
+  end: number
+}
+
 class Player {
   readonly audio: HTMLAudioElement
   private listeners = new Set<Listener>()
   private video: HTMLVideoElement | null = null
   private raf = 0
+  private _loop: Loop | null = null
 
   constructor() {
     this.audio = new Audio()
@@ -68,9 +74,30 @@ class Player {
   }
 
   private tick = (): void => {
+    const loop = this._loop
+    if (loop && this.audio.currentTime >= loop.end) {
+      // Jump back to the loop start; 'seeked' listeners (click scheduler) reset themselves.
+      this.audio.currentTime = loop.start
+    }
     this.syncVideo()
     this.emit()
     if (!this.audio.paused) this.raf = requestAnimationFrame(this.tick)
+  }
+
+  /** Section to repeat while playing; null to play straight through. */
+  get loop(): Loop | null {
+    return this._loop
+  }
+  setLoop(loop: Loop | null): void {
+    if (loop && loop.end - loop.start < 0.2) loop = { start: loop.start, end: loop.start + 0.2 }
+    this._loop = loop
+    this.emit()
+  }
+  /** Start playing the loop from its beginning. */
+  playLoop(loop: Loop): void {
+    this.setLoop(loop)
+    this.seek(loop.start)
+    this.play()
   }
 
   get time(): number {

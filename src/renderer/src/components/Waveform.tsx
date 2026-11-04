@@ -8,6 +8,8 @@ import { hasTiming } from '../lib/timing'
 import type { Line, Word } from '../../../shared/types'
 import WordTrack from './WordTrack'
 
+const LOOP_ID = '__loop__'
+
 interface Props {
   onLineTimeChange: (lineId: string, start: number, end: number) => void
   onWordsChange: (lineId: string, words: Word[]) => void
@@ -19,6 +21,7 @@ export default function Waveform({ onLineTimeChange, onWordsChange }: Props): JS
   const wsRef = useRef<WaveSurfer | null>(null)
   const regionsRef = useRef<RegionsPlugin | null>(null)
   const regionMap = useRef(new Map<string, Region>())
+  const loopRegion = useRef<Region | null>(null)
   const [zoom, setZoom] = useState(120)
   const [ready, setReady] = useState(false)
   const [view, setView] = useState({ pxPerSec: 120, scrollLeft: 0, width: 0 })
@@ -67,10 +70,12 @@ export default function Waveform({ onLineTimeChange, onWordsChange }: Props): JS
     const ro = new ResizeObserver(syncView)
     ro.observe(containerRef.current)
     regions.on('region-updated', (r) => {
-      onChangeRef.current(r.id, r.start, r.end)
+      if (r.id === LOOP_ID) player.setLoop({ start: r.start, end: r.end })
+      else onChangeRef.current(r.id, r.start, r.end)
     })
     regions.on('region-clicked', (r, e) => {
       e.stopPropagation()
+      if (r.id === LOOP_ID) return
       selectLine(r.id)
       player.seek(r.start)
     })
@@ -89,6 +94,36 @@ export default function Waveform({ onLineTimeChange, onWordsChange }: Props): JS
   useEffect(() => {
     if (ready) wsRef.current?.zoom(zoom)
   }, [zoom, ready])
+
+  // Mirror the player's loop as a draggable region on top of the waveform.
+  useEffect(() => {
+    if (!ready) return
+    const sync = () => {
+      const regions = regionsRef.current
+      if (!regions) return
+      const loop = player.loop
+      const r = loopRegion.current
+      if (!loop) {
+        if (r) {
+          r.remove()
+          loopRegion.current = null
+        }
+        return
+      }
+      if (r) {
+        if (Math.abs(r.start - loop.start) > 0.001 || Math.abs(r.end - loop.end) > 0.001) r.setOptions({ start: loop.start, end: loop.end })
+      } else {
+        const nr = regions.addRegion({ id: LOOP_ID, start: loop.start, end: loop.end, color: 'rgba(255, 209, 102, 0.12)', drag: true, resize: true, minLength: 0.2 })
+        const el = document.createElement('div')
+        el.className = 'region-label loop'
+        el.textContent = '⟳ loop'
+        nr.setContent(el)
+        loopRegion.current = nr
+      }
+    }
+    sync()
+    return player.subscribe(sync)
+  }, [ready])
 
   // Sync regions with lines.
   useEffect(() => {

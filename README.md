@@ -48,6 +48,8 @@ The packaged app is unsigned; on first launch right-click the app and choose Ope
 4. **Align** – "Auto-align words" runs the Python aligner (faster-whisper transcription in Farsi matched to the lyric words). Then adjust:
    - drag or resize line blocks on the waveform (words scale with the line),
    - on the word track under the waveform, drag a word to the moment it should light up (an edge that touched its neighbour stays attached, so no gaps open), drag its edges to stretch it, select several words (⇧-click a range, ⌘-click to toggle, drag a box on the track, ⌥-click for the rest of the line) and drag any of them to move the group, or nudge the selection with ← → (⇧ for 10 ms steps),
+   - **Loop** a section: "⟳ line" or "⟳ selection" repeats the selected line or words; A / B set the loop edges at the playhead, and the yellow loop band on the waveform can be dragged and resized. Playback stays inside the loop until you switch it off.
+   - **Beep at word starts** plays a short click exactly where each selected word (or each word of the selected line, or every word inside the loop) begins, so while the loop plays you can hear whether a marker is early or late and drag it until the click lands on the syllable. The clicks follow your edits live.
    - drag word boundaries in the line strip, or set a word's start/end to the playhead,
    - **Tap mode**: play the song and hold `Enter` (or `T`) for the duration of each word (or each line), release when it ends.
    - nudge a line, or everything from a line onwards, by 0.1 s.

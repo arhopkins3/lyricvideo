@@ -31,6 +31,8 @@ interface AppState {
   notice: string | null
   showSettings: boolean
   selectedLineId: string | null
+  /** Words selected on the word track (ids). */
+  selectedWordIds: Set<string>
   dirty: boolean
 
   setStep(step: Step): void
@@ -40,6 +42,7 @@ interface AppState {
   setNotice(msg: string | null): void
   setShowSettings(v: boolean): void
   selectLine(id: string | null): void
+  setSelectedWords(ids: Set<string>): void
   refreshSettings(): Promise<void>
   refreshTools(): Promise<void>
   save(saveAs?: boolean): Promise<void>
@@ -62,11 +65,13 @@ export const useStore = create<AppState>((set, get) => ({
   notice: null,
   showSettings: false,
   selectedLineId: null,
+  selectedWordIds: new Set<string>(),
   dirty: false,
 
   setStep: (step) => set({ step }),
   setHandle: (handle) => {
-    set({ handle, step: 'source', selectedLineId: null, dirty: false, progress: {} })
+    set({ handle, step: 'source', selectedLineId: null, selectedWordIds: new Set(), dirty: false, progress: {} })
+    player.setLoop(null)
     const project = handle?.project
     player.load(project ? mediaUrl(project.id, project.source.audioFile) : null)
   },
@@ -88,6 +93,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setShowSettings: (showSettings) => set({ showSettings }),
   selectLine: (selectedLineId) => set({ selectedLineId }),
+  setSelectedWords: (selectedWordIds) => set({ selectedWordIds }),
   refreshSettings: async () => set({ settings: await window.api.settings.get() }),
   refreshTools: async () => set({ tools: await window.api.tools.status() }),
   save: async (saveAs = false) => {

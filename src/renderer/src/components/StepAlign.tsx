@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { player } from '../lib/player'
+import { clicker } from '../lib/clicker'
 import { usePlayerTime } from '../lib/usePlayer'
 import { distributeWords, fmtTime, hasTiming, lineHasAnyTiming } from '../lib/timing'
 import type { Line, Word } from '../../../shared/types'
@@ -29,8 +30,41 @@ export default function StepAlign(): JSX.Element {
   const cursor = useRef<{ line: number; word: number }>({ line: 0, word: 0 })
   const holding = useRef(false)
   const { time } = usePlayerTime()
+  const selectedWordIds = useStore((s) => s.selectedWordIds)
+  const [beep, setBeep] = useState(clicker.enabled)
+  const loop = player.loop
 
   const selected = lines.find((l) => l.id === selectedLineId) ?? null
+
+  // ---- beep markers: selected words, else the selected line's words, else every word inside the loop
+  useEffect(() => {
+    let words: Word[]
+    if (selectedWordIds.size > 0) words = lines.flatMap((l) => l.words.filter((w) => selectedWordIds.has(w.id)))
+    else if (selected) words = selected.words
+    else if (loop) words = lines.flatMap((l) => l.words.filter((w) => typeof w.start === 'number' && w.start >= loop.start && w.start < loop.end))
+    else words = []
+    clicker.setTimes(words.map((w) => w.start).filter((t): t is number => typeof t === 'number'))
+  }, [lines, selectedWordIds, selected, loop])
+
+  const toggleBeep = () => {
+    clicker.setEnabled(!beep)
+    setBeep(!beep)
+  }
+  const pad = 0.35
+  const loopLine = () => {
+    if (!selected || !hasTiming(selected)) return
+    player.playLoop({ start: Math.max(0, selected.start - pad), end: selected.end + pad })
+  }
+  const loopSelection = () => {
+    const ws = lines.flatMap((l) => l.words.filter((w) => selectedWordIds.has(w.id) && typeof w.start === 'number' && typeof w.end === 'number'))
+    if (ws.length === 0) return loopLine()
+    player.playLoop({ start: Math.max(0, Math.min(...ws.map((w) => w.start!)) - pad), end: Math.max(...ws.map((w) => w.end!)) + pad })
+  }
+  const setLoopEdge = (edge: 'start' | 'end') => {
+    const cur = loop ?? { start: Math.max(0, time - 2), end: time + 2 }
+    const next = edge === 'start' ? { start: time, end: Math.max(time + 0.2, cur.end) } : { start: Math.min(cur.start, time - 0.2), end: time }
+    player.setLoop(next)
+  }
   const selectedIndex = selected ? lines.indexOf(selected) : -1
 
   const setLines = useCallback(
@@ -310,6 +344,32 @@ export default function StepAlign(): JSX.Element {
               </button>
             </div>
           )}
+          <div className="sep" />
+          <div className="row loop-tools">
+            <span className="muted small">Loop</span>
+            <button className="btn small" onClick={loopSelection} disabled={!selected && selectedWordIds.size === 0} title="Repeat the selected words (or the selected line) and play">
+              ⟳ {selectedWordIds.size > 0 ? 'selection' : 'line'}
+            </button>
+            <button className="btn small" onClick={() => setLoopEdge('start')} title="Loop start = playhead">
+              A
+            </button>
+            <button className="btn small" onClick={() => setLoopEdge('end')} title="Loop end = playhead">
+              B
+            </button>
+            {loop && (
+              <>
+                <span className="mono small muted">
+                  {fmtTime(loop.start)}–{fmtTime(loop.end)}
+                </span>
+                <button className="btn small ghost" onClick={() => player.setLoop(null)}>
+                  off
+                </button>
+              </>
+            )}
+            <label className={`small beep-toggle ${beep ? 'on' : ''}`} title="Play a short beep exactly where each selected word starts, so you can hear whether the marker is early or late">
+              <input type="checkbox" checked={beep} onChange={toggleBeep} /> beep at word starts
+            </label>
+          </div>
           <div className="sep" />
           <div className="row">
             <button className="btn small" onClick={setLineStartHere} disabled={!selected}>

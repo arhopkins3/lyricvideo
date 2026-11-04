@@ -3,6 +3,7 @@ import type { Line, Word } from '../../../shared/types'
 import { player } from '../lib/player'
 import { usePlayerTime } from '../lib/usePlayer'
 import { fmtTime, moveWords, wordRange } from '../lib/timing'
+import { useStore } from '../store'
 
 interface Props {
   lines: Line[]
@@ -36,7 +37,10 @@ export default function WordTrack(props: Props): JSX.Element {
   const { lines, pxPerSec, scrollLeft, viewWidth } = props
   const { time } = usePlayerTime()
   const [drag, setDrag] = useState<Drag | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const selected = useStore((s) => s.selectedWordIds)
+  const setSelectedRaw = useStore((s) => s.setSelectedWords)
+  const setSelected = (v: Set<string> | ((s: Set<string>) => Set<string>)) =>
+    setSelectedRaw(typeof v === 'function' ? v(useStore.getState().selectedWordIds) : v)
   const [anchor, setAnchor] = useState<string | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const propsRef = useRef(props)
