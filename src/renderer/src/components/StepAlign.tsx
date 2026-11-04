@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useStore, guarded } from '../store'
+import { useStore } from '../store'
 import { player } from '../lib/player'
 import { usePlayerTime } from '../lib/usePlayer'
 import { distributeWords, fmtTime, hasTiming, lineHasAnyTiming } from '../lib/timing'
@@ -84,7 +84,13 @@ export default function StepAlign(): JSX.Element {
       return
     }
     setAligning(true)
-    const res = await guarded(() => window.api.align.run(p.id, lines, { model, separate }))
+    let res: Awaited<ReturnType<typeof window.api.align.run>> | undefined
+    try {
+      res = await window.api.align.run(p.id, lines, { model, separate })
+    } catch (e) {
+      const msg = String(e)
+      if (!/cancelled/i.test(msg)) useStore.getState().setError(msg.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+    }
     setAligning(false)
     if (!res) return
     setLines((ls) =>

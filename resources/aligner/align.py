@@ -16,19 +16,39 @@ Progress is reported as JSON lines on stdout: {"progress": 0.4, "message": "..."
 """
 from __future__ import annotations
 
+import faulthandler
+
+faulthandler.enable()  # a native crash (segfault in the model library) then still prints a traceback
+
 import argparse
 import difflib
 import json
 import os
 import re
 import sys
+
+import warnings
+
+warnings.filterwarnings("ignore")  # library warnings go to the app log and only confuse users
+import logging
+
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)  # e.g. the "unauthenticated requests" notice
+
+# Two OpenMP runtimes (CTranslate2 + torch) abort the process on macOS unless this is set.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", str(max(1, (os.cpu_count() or 4) // 2)))
 import tempfile
 import unicodedata
 from dataclasses import dataclass
 from typing import List, Optional
 
 
+LAST_STAGE = "starting"
+
+
 def report(progress: float, message: str) -> None:
+    global LAST_STAGE
+    LAST_STAGE = message
     print(json.dumps({"progress": progress, "message": message}, ensure_ascii=False), flush=True)
 
 
@@ -111,28 +131,55 @@ def separate_vocals(audio: str, workdir: str) -> str:
     return audio
 
 
-def transcribe(audio: str, model_name: str, initial_prompt: Optional[str]) -> List[Token]:
+def load_audio(path: str, ffmpeg: str) -> "np.ndarray":
+    """Decode any audio/video file to 16 kHz mono float32 with ffmpeg.
+
+    faster-whisper's own decoder depends on PyAV, whose API keeps changing; ffmpeg is already a
+    requirement of the app, so use it directly and hand the samples to the model.
+    """
+    import subprocess
+
+    import numpy as np
+
+    cmd = [ffmpeg, "-nostdin", "-v", "error", "-i", path, "-f", "f32le", "-ac", "1", "-ar", "16000", "-"]
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg could not decode the audio: {proc.stderr.decode('utf-8', 'replace')[-400:]}")
+    return np.frombuffer(proc.stdout, dtype=np.float32).copy()
+
+
+def transcribe(audio: str, model_name: str, initial_prompt: Optional[str], ffmpeg: str) -> List[Token]:
     from faster_whisper import WhisperModel  # type: ignore
 
-    report(0.25, f"Loading whisper model '{model_name}' (downloads on first use)…")
-    try:
-        model = WhisperModel(model_name, device="auto", compute_type="auto")
-    except Exception:
-        model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    report(0.22, "Decoding audio…")
+    samples = load_audio(audio, ffmpeg)
+    audio_duration = len(samples) / 16000.0
+
+    report(0.25, f"Loading whisper model '{model_name}' (downloads on first use, ~1.5 GB for large models)…")
+    # CPU + int8 is the configuration that works everywhere (macOS has no CUDA; Apple Silicon runs int8 well).
+    model = WhisperModel(model_name, device="cpu", compute_type="int8", cpu_threads=int(os.environ.get("OMP_NUM_THREADS", "4")))
     report(0.35, "Transcribing vocals…")
-    segments, info = model.transcribe(
-        audio,
-        language="fa",
-        task="transcribe",
-        beam_size=5,
-        word_timestamps=True,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 300},
-        condition_on_previous_text=False,
-        initial_prompt=initial_prompt,
-    )
+
+    def run(vad: bool):
+        return model.transcribe(
+            samples,
+            language="fa",
+            task="transcribe",
+            beam_size=5,
+            word_timestamps=True,
+            vad_filter=vad,
+            vad_parameters={"min_silence_duration_ms": 300} if vad else None,
+            condition_on_previous_text=False,
+            initial_prompt=initial_prompt,
+        )
+
+    try:
+        segments, info = run(True)
+    except Exception as exc:  # the VAD model (onnxruntime) is the most platform-sensitive piece; fall back without it
+        report(0.35, f"VAD unavailable ({exc.__class__.__name__}); transcribing without it")
+        segments, info = run(False)
     tokens: List[Token] = []
-    duration = float(getattr(info, "duration", 0.0) or 0.0)
+    duration = float(getattr(info, "duration", 0.0) or 0.0) or audio_duration
     for seg in segments:
         if seg.end and duration:
             report(0.35 + 0.45 * min(1.0, seg.end / duration), f"Transcribing… {int(seg.end)}s / {int(duration)}s")
@@ -263,6 +310,7 @@ def main() -> int:
     ap.add_argument("--separate", action="store_true", help="Run demucs vocal separation first when available")
     ap.add_argument("--duration", type=float, default=0.0)
     ap.add_argument("--tokens-cache", default=None, help="Reuse a previous transcription JSON if present")
+    ap.add_argument("--ffmpeg", default="ffmpeg", help="Path to the ffmpeg binary used to decode the audio")
     args = ap.parse_args()
 
     with open(args.lyrics, "r", encoding="utf-8") as fh:
@@ -282,7 +330,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             audio = separate_vocals(args.audio, tmp) if args.separate else args.audio
             first_lines = " ".join(l.get("fa", "") or " ".join(w["fa"] for w in l.get("words", [])) for l in lyrics.get("lines", [])[:4])
-            tokens = transcribe(audio, args.model, first_lines[:200] or None)
+            tokens = transcribe(audio, args.model, first_lines[:200] or None, args.ffmpeg)
         if args.tokens_cache:
             with open(args.tokens_cache, "w", encoding="utf-8") as fh:
                 json.dump([t.__dict__ for t in tokens], fh, ensure_ascii=False)
@@ -328,5 +376,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as exc:  # surface the error to the app
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False), flush=True)
-        raise
+        import traceback
+
+        print(json.dumps({"error": f"{exc.__class__.__name__}: {exc} (while: {LAST_STAGE})"}, ensure_ascii=False), flush=True)
+        traceback.print_exc()
+        sys.exit(1)
