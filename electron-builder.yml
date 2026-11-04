@@ -1,0 +1,24 @@
+appId: com.arhopkins3.lyricvideo
+productName: LyricVideo
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources/aligner
+    to: aligner
+mac:
+  category: public.app-category.music
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: false
+  identity: null
+  extendInfo:
+    NSMicrophoneUsageDescription: Not used.
+fileAssociations:
+  - ext: lvproj
+    name: LyricVideo Project
+    role: Editor
