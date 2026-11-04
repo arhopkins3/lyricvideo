@@ -20,15 +20,12 @@ interface Props {
 
 type Drag =
   | { kind: 'group'; originX: number; lines: Line[] }
-  | { kind: 'edge'; lineId: string; wordIndex: number; edge: 'start' | 'end'; originX: number; words: Word[] }
   | { kind: 'band'; originX: number; currentX: number; additive: boolean }
 
-const MIN_LEN = 0.05
-
 /**
- * A second track under the waveform: one block per word, placed where the word becomes highlighted.
- *  - drag a word to slide it (edges that touched a neighbour stay attached)
- *  - drag a word's left/right edge to change where it starts/ends
+ * A second track under the waveform: one marker per word at the moment it lights up. A word stays
+ * highlighted until the next marker, or until its line ends (the line block's right edge).
+ *  - drag a marker to move it
  *  - click to select; ⇧-click selects a range; ⌘/Ctrl-click toggles; drag on empty track to box-select
  *  - ⌥-drag selects the word and the rest of its line
  *  - with a selection: drag any selected word to move them all; ← / → nudge by 50 ms (⇧ for 10 ms)
@@ -61,24 +58,7 @@ export default function WordTrack(props: Props): JSX.Element {
         return
       }
       const dt = (e.clientX - drag.originX) / pxPerSec
-      if (drag.kind === 'group') {
-        applyMove(drag.lines, selRef.current, dt)
-        return
-      }
-      const words = drag.words.map((w) => ({ ...w }))
-      const w = words[drag.wordIndex]
-      const prev = words[drag.wordIndex - 1]
-      const next = words[drag.wordIndex + 1]
-      const o = drag.words[drag.wordIndex]
-      if (o.start === undefined || o.end === undefined) return
-      if (drag.edge === 'start') {
-        const lo = prev?.start !== undefined ? prev.start + MIN_LEN : 0
-        w.start = Math.min(o.end - MIN_LEN, Math.max(lo, o.start + dt))
-      } else {
-        const hi = next?.end !== undefined ? next.end : Infinity
-        w.end = Math.min(hi, Math.max(o.start + MIN_LEN, o.end + dt))
-      }
-      propsRef.current.onWordsChange(drag.lineId, words)
+      applyMove(drag.lines, selRef.current, dt)
     }
     const up = (e: PointerEvent) => {
       if (drag.kind === 'band') {
@@ -183,16 +163,17 @@ export default function WordTrack(props: Props): JSX.Element {
             if (w.start === undefined || w.end === undefined) return null
             if (w.end < visibleStart - 1 || w.start > visibleEnd + 1) return null
             const left = w.start * pxPerSec
-            const width = Math.max(8, (w.end - w.start) * pxPerSec)
+            // Display span: until the next marker or the line end; only the marker itself is editable.
+            const width = Math.max(10, (w.end - w.start) * pxPerSec)
             const active = time >= w.start && time < w.end
             const isSel = selected.has(w.id)
             const inSelectedLine = props.selectedLineId === line.id
             return (
               <div
                 key={w.id}
-                className={`wt-word ${active ? 'active' : ''} ${isSel ? 'selected' : ''} ${inSelectedLine ? 'in-line' : ''} ${li % 2 ? 'odd' : ''}`}
+                className={`wt-word marker ${active ? 'active' : ''} ${isSel ? 'selected' : ''} ${inSelectedLine ? 'in-line' : ''} ${li % 2 ? 'odd' : ''} ${wi === line.words.length - 1 ? 'last' : ''}`}
                 style={{ left, width }}
-                title={`${w.fa}${w.finglish ? ` (${w.finglish})` : ''}  ${fmtTime(w.start)} – ${fmtTime(w.end)}`}
+                title={`${w.fa}${w.finglish ? ` (${w.finglish})` : ''}  starts ${fmtTime(w.start)}`}
                 onPointerDown={(e) => {
                   if (e.button !== 0) return
                   e.stopPropagation()
@@ -203,26 +184,13 @@ export default function WordTrack(props: Props): JSX.Element {
                   }
                 }}
               >
-                <div
-                  className="wt-handle left"
-                  onPointerDown={(e) => {
-                    e.stopPropagation()
-                    setDrag({ kind: 'edge', lineId: line.id, wordIndex: wi, edge: 'start', originX: e.clientX, words: line.words })
-                  }}
-                />
+                <div className="wt-pin" />
                 {width > 26 && (
                   <div className="wt-label">
                     <span className="rtl">{w.fa}</span>
                     {width > 60 && w.finglish && <small>{w.finglish}</small>}
                   </div>
                 )}
-                <div
-                  className="wt-handle right"
-                  onPointerDown={(e) => {
-                    e.stopPropagation()
-                    setDrag({ kind: 'edge', lineId: line.id, wordIndex: wi, edge: 'end', originX: e.clientX, words: line.words })
-                  }}
-                />
               </div>
             )
           })

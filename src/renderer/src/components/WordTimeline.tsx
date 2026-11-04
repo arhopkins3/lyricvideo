@@ -10,8 +10,8 @@ interface Props {
 }
 
 /**
- * Editor for the words of one line. Shows the line's span as a strip; word boundaries can be dragged,
- * clicking a word seeks to it, and each word has "set start/end to playhead" buttons.
+ * Editor for the words of one line. Shows the line's span as a strip; dragging a boundary moves the
+ * next word's marker, clicking a word seeks to it, and each word has a "set start to playhead" button.
  */
 export default function WordTimeline({ line, onChange }: Props): JSX.Element {
   const { time } = usePlayerTime()
@@ -34,13 +34,10 @@ export default function WordTimeline({ line, onChange }: Props): JSX.Element {
       const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
       const t = t0 + frac * span
       const next = words.map((w) => ({ ...w }))
-      const a = next[drag]
       const b = next[drag + 1]
-      const lo = (a.start ?? t0) + 0.05
-      const hi = (b.end ?? t1) - 0.05
-      const clamped = Math.min(hi, Math.max(lo, t))
-      a.end = clamped
-      b.start = clamped
+      const lo = (next[drag].start ?? t0) + 0.05
+      const hi = (next[drag + 2]?.start ?? line.end ?? t1) - 0.05
+      b.start = Math.min(hi, Math.max(lo, t))
       onChange(next)
     }
     const up = () => setDrag(null)
@@ -50,15 +47,13 @@ export default function WordTimeline({ line, onChange }: Props): JSX.Element {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [drag, words, onChange, t0, t1, span])
+  }, [drag, words, onChange, t0, t1, span, line.end])
 
-  const setWordTime = (i: number, field: 'start' | 'end', t: number) => {
+  const setWordStart = (i: number, t: number) => {
     const next = words.map((w) => ({ ...w }))
-    next[i][field] = t
-    // Keep neighbours consistent.
-    if (field === 'start' && i > 0 && (next[i - 1].end ?? 0) > t) next[i - 1].end = t
-    if (field === 'end' && i < next.length - 1 && (next[i + 1].start ?? Infinity) < t) next[i + 1].start = t
-    if (field === 'start' && (next[i].end ?? Infinity) < t + 0.05) next[i].end = t + 0.05
+    const lo = (next[i - 1]?.start ?? -Infinity) + 0.05
+    const hi = (next[i + 1]?.start ?? line.end ?? Infinity) - 0.05
+    next[i].start = Math.min(hi, Math.max(lo, t))
     onChange(next)
   }
 
@@ -71,7 +66,7 @@ export default function WordTimeline({ line, onChange }: Props): JSX.Element {
         </span>
       </div>
       {!timed ? (
-        <p className="muted small">This line has no word timing yet. Use auto-align, tap mode, or "Distribute evenly".</p>
+        <p className="muted small">This line has no word timing yet. Use auto-align, tap mode, "Line starts at playhead" or "Distribute evenly".</p>
       ) : (
         <div ref={stripRef} className="strip">
           {words.map((w, i) => {
@@ -111,15 +106,11 @@ export default function WordTimeline({ line, onChange }: Props): JSX.Element {
               <td className="rtl fa-cell">{w.fa}</td>
               <td className="muted small">{w.finglish ?? ''}</td>
               <td className="mono small">
-                <button className="btn tiny" onClick={() => setWordTime(i, 'start', time)} title="Set start to playhead">
+                <button className="btn tiny" onClick={() => setWordStart(i, time)} title="Move this word's marker to the playhead">
                   ⇤ {fmtTime(w.start)}
                 </button>
               </td>
-              <td className="mono small">
-                <button className="btn tiny" onClick={() => setWordTime(i, 'end', time)} title="Set end to playhead">
-                  {fmtTime(w.end)} ⇥
-                </button>
-              </td>
+              <td className="mono small muted">until {fmtTime(w.end)}</td>
               <td>
                 <button className="btn tiny ghost" onClick={() => typeof w.start === 'number' && player.seek(w.start)}>
                   ▶

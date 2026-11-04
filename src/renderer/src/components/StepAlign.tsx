@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { player } from '../lib/player'
 import { clicker } from '../lib/clicker'
 import { usePlayerTime } from '../lib/usePlayer'
-import { distributeWords, fmtTime, hasTiming, lineHasAnyTiming } from '../lib/timing'
+import { distributeWords, fmtTime, hasTiming, lineHasAnyTiming, normalizeLine } from '../lib/timing'
 import type { Line, Word } from '../../../shared/types'
 import Preview from './Preview'
 import Waveform from './Waveform'
@@ -78,14 +78,19 @@ export default function StepAlign(): JSX.Element {
       setLines((ls) =>
         ls.map((l) => {
           if (l.id !== lineId || !hasTiming(l)) return l
-          const oldSpan = Math.max(0.001, l.end - l.start)
-          const k = (end - start) / oldSpan
-          const words = l.words.map((w) =>
-            typeof w.start === 'number' && typeof w.end === 'number'
-              ? { ...w, start: start + (w.start - l.start) * k, end: start + (w.end - l.start) * k }
-              : w
-          )
-          return { ...l, start, end, words }
+          const dStart = start - l.start
+          const dEnd = end - l.end
+          let words = l.words
+          if (Math.abs(dStart - dEnd) < 0.002) {
+            // Whole block dragged: shift every marker.
+            words = l.words.map((w) => (typeof w.start === 'number' ? { ...w, start: w.start + dStart } : w))
+          } else if (Math.abs(dStart) > 0.002) {
+            // Left edge moved: scale the markers into the new span.
+            const k = (end - start) / Math.max(0.001, l.end - l.start)
+            words = l.words.map((w) => (typeof w.start === 'number' ? { ...w, start: start + (w.start - l.start) * k } : w))
+          }
+          // Right edge moved alone: only the line end (where the last word stops) changes.
+          return normalizeLine({ ...l, end, words })
         })
       )
     },
@@ -97,14 +102,9 @@ export default function StepAlign(): JSX.Element {
       setLines((ls) =>
         ls.map((l) => {
           if (l.id !== lineId) return l
-          const starts = words.map((w) => w.start).filter((x): x is number => typeof x === 'number')
-          const ends = words.map((w) => w.end).filter((x): x is number => typeof x === 'number')
-          return {
-            ...l,
-            words,
-            start: starts.length ? Math.min(...starts) : l.start,
-            end: ends.length ? Math.max(...ends) : l.end
-          }
+          // A caller that set explicit ends (distribute, tap, aligner) also defines the line end.
+          const lastEnd = words[words.length - 1]?.end
+          return normalizeLine({ ...l, end: typeof lastEnd === 'number' ? Math.max(lastEnd, l.end ?? 0) : l.end, words })
         })
       )
     },
@@ -135,7 +135,7 @@ export default function StepAlign(): JSX.Element {
           const rw = r.words.find((x) => x.id === w.id)
           return rw ? { ...w, start: rw.start ?? w.start, end: rw.end ?? w.end } : w
         })
-        return { ...l, start: r.start ?? l.start, end: r.end ?? l.end, words }
+        return normalizeLine({ ...l, end: r.end ?? l.end, words })
       })
     )
     useStore.getState().setNotice(res.notes ?? 'Alignment applied')
@@ -211,6 +211,7 @@ export default function StepAlign(): JSX.Element {
           const timed = { ...line, start: line.start!, end: line.end }
           line.words = distributeWords(timed)
         }
+        next[c.line] = normalizeLine(line)
         return next
       })
       // advance cursor
@@ -257,7 +258,7 @@ export default function StepAlign(): JSX.Element {
         if (l.id !== selected.id) return l
         const end = typeof l.end === 'number' && l.end > time + 0.2 ? l.end : time + Math.max(1, l.words.length * 0.45)
         const timed = { ...l, start: time, end }
-        return { ...timed, words: distributeWords(timed) }
+        return normalizeLine({ ...timed, words: distributeWords(timed) })
       })
     )
 

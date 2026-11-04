@@ -10,9 +10,9 @@ export interface Word {
   finglish?: string
   /** Short English meaning of this word in context (for the learning player). */
   gloss?: string
-  /** Start time in seconds (undefined until aligned). */
+  /** The moment the word lights up, in seconds (undefined until aligned). */
   start?: number
-  /** End time in seconds. */
+  /** Derived: the next word's start, or the line's end for the last word. Kept for the renderer and export. */
   end?: number
 }
 

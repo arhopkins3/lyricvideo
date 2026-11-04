@@ -226,3 +226,12 @@ kbd { background: var(--bg-3); border: 1px solid var(--border); border-bottom-wi
 .region-label.loop { color: var(--accent-2); font-weight: 600; }
 .beep-toggle.on { color: var(--accent-2); }
 .loop-tools .btn { padding: 4px 8px; }
+/* Word markers */
+.wt-word.marker { cursor: grab; border-radius: 0 4px 4px 0; border-left: none; background: rgba(122,162,247,0.10); }
+.wt-word.marker.odd { background: rgba(158,206,106,0.09); }
+.wt-word.marker.active { background: rgba(255,209,102,0.22); }
+.wt-pin { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: rgba(122,162,247,0.95); border-radius: 2px; }
+.wt-word.odd .wt-pin { background: rgba(158,206,106,0.95); }
+.wt-word.active .wt-pin, .wt-word.selected .wt-pin { background: var(--accent-2); width: 4px; }
+.wt-word.last { border-right: 2px solid rgba(255,255,255,0.35); }
+.wt-label { padding-left: 4px; }
