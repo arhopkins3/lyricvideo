@@ -139,7 +139,7 @@ export default function Waveform({ onLineTimeChange, onWordsChange }: Props): JS
         <span className="muted small">Zoom</span>
         <input type="range" min={20} max={600} value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))} />
         <span className="muted small">
-          Lines: drag a block to move it, drag its edges to resize. Words (lower track): drag to slide, ⌥-drag to slide the rest of the line with it, drag an edge to stretch, click then ← → to nudge (⇧ for fine steps).
+          Lines: drag a block to move it, drag its edges to resize. Words (lower track): drag to slide (touching neighbours stay attached), drag an edge to stretch. Select several with ⇧-click, ⌘-click or by dragging a box on the track, then drag any of them or use ← → (⇧ for fine steps). ⌥-click selects the rest of the line.
         </span>
       </div>
     </div>

@@ -103,3 +103,72 @@ export function distributeWords(line: Line): Word[] {
     return out
   })
 }
+
+const MIN_WORD = 0.05
+/** Two edges closer than this are treated as attached and stay attached when one side moves. */
+const GLUE = 0.03
+
+/**
+ * Slide a set of words (possibly across several lines) by `delta` seconds as one rigid group.
+ * Word order within a line is preserved (the move is clamped), and edges that were touching an
+ * unselected neighbour stay attached: moving a late word earlier stretches it to the next word
+ * instead of leaving a gap, and the previous word shrinks or grows to meet it.
+ * Returns the updated word arrays per line (only lines that changed).
+ */
+export function moveWords(lines: Line[], selectedIds: Set<string>, delta: number): Map<string, Word[]> {
+  const out = new Map<string, Word[]>()
+  if (selectedIds.size === 0 || delta === 0) return out
+  // Clamp delta so order is preserved in every affected line and nothing goes below zero.
+  let lo = -Infinity
+  let hi = Infinity
+  for (const line of lines) {
+    const idx = line.words.map((w, i) => (selectedIds.has(w.id) ? i : -1)).filter((i) => i >= 0)
+    if (idx.length === 0) continue
+    const first = line.words[idx[0]]
+    const last = line.words[idx[idx.length - 1]]
+    if (first.start === undefined || last.start === undefined) continue
+    const prev = line.words[idx[0] - 1]
+    const next = line.words[idx[idx.length - 1] + 1]
+    lo = Math.max(lo, -first.start, prev?.start !== undefined ? prev.start + MIN_WORD - first.start : -Infinity)
+    hi = Math.min(hi, next?.start !== undefined ? next.start - MIN_WORD - last.start : Infinity)
+  }
+  if (lo === -Infinity && hi === Infinity) return out
+  const d = Math.min(hi, Math.max(lo, delta))
+  if (!Number.isFinite(d) || d === 0) return out
+  for (const line of lines) {
+    const idx = line.words.map((w, i) => (selectedIds.has(w.id) ? i : -1)).filter((i) => i >= 0)
+    if (idx.length === 0) continue
+    const words = line.words.map((w) => ({ ...w }))
+    for (const i of idx) {
+      const w = words[i]
+      if (w.start === undefined || w.end === undefined) continue
+      w.start += d
+      w.end += d
+    }
+    const firstI = idx[0]
+    const lastI = idx[idx.length - 1]
+    const prev = words[firstI - 1]
+    const first = words[firstI]
+    const oldFirst = line.words[firstI]
+    if (prev && prev.end !== undefined && prev.start !== undefined && oldFirst.start !== undefined && Math.abs(prev.end - oldFirst.start) <= GLUE) {
+      prev.end = Math.max(prev.start + MIN_WORD, first.start!)
+    }
+    const next = words[lastI + 1]
+    const last = words[lastI]
+    const oldLast = line.words[lastI]
+    if (next && next.start !== undefined && oldLast.end !== undefined && Math.abs(oldLast.end - next.start) <= GLUE) {
+      last.end = Math.max(last.start! + MIN_WORD, next.start)
+    }
+    out.set(line.id, words)
+  }
+  return out
+}
+
+/** Ids of all words in document order between (and including) two word ids. */
+export function wordRange(lines: Line[], fromId: string, toId: string): string[] {
+  const all = lines.flatMap((l) => l.words.map((w) => w.id))
+  const a = all.indexOf(fromId)
+  const b = all.indexOf(toId)
+  if (a < 0 || b < 0) return [toId]
+  return all.slice(Math.min(a, b), Math.max(a, b) + 1)
+}

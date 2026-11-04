@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeAt, changePoints, distributeWords, stateKey } from '../src/renderer/src/lib/timing'
+import { activeAt, changePoints, distributeWords, moveWords, stateKey } from '../src/renderer/src/lib/timing'
 import { planExport } from '../src/renderer/src/render/exportFrames'
 import { mergeLines, setLineFinglish } from '../src/renderer/src/lib/lines'
 import { defaultStyle, linesFromText, type Project } from '../src/shared/types'
@@ -89,5 +89,29 @@ describe('lines', () => {
     const bad = setLineFinglish(p.lines[0], 'del man')
     expect(bad.words.every((w) => w.finglish === undefined)).toBe(true)
     expect(bad.finglish).toBe('del man')
+  })
+})
+
+describe('moveWords', () => {
+  it('moves a group rigidly, keeps order, and keeps touching edges attached', () => {
+    const p = project()
+    const line = p.lines[0] // 3 words over 1..3, all touching
+    const [w0, w1, w2] = line.words
+    // Move the middle word 0.2 s earlier: it stretches to still touch w2, and w0 shrinks to meet it.
+    const res = moveWords(p.lines, new Set([w1.id]), -0.2)
+    const words = res.get(line.id)!
+    expect(words[1].start).toBeCloseTo(w1.start! - 0.2)
+    expect(words[1].end).toBeCloseTo(w2.start!)
+    expect(words[0].end).toBeCloseTo(words[1].start!)
+    expect(words[2].start).toBeCloseTo(w2.start!)
+    // Moving w1 and w2 together far right is clamped so w1 stays after w0, and w0 stays attached.
+    const res2 = moveWords(p.lines, new Set([w1.id, w2.id]), 10)
+    const ws2 = res2.get(line.id)!
+    expect(ws2[2].start! - ws2[1].start!).toBeCloseTo(w2.start! - w1.start!)
+    expect(ws2[0].end).toBeCloseTo(ws2[1].start!)
+    // A selection spanning two lines moves both lines.
+    const res3 = moveWords(p.lines, new Set([w2.id, p.lines[1].words[0].id]), 0.1)
+    expect(res3.size).toBe(2)
+    expect(res3.get(p.lines[1].id)![0].start).toBeCloseTo(p.lines[1].words[0].start! + 0.1)
   })
 })
