@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starts the Electron app with hot reload. Other scripts:
+`npm run dev` starts the Electron app with hot reload. If it ever fails with `Error: Electron uninstall`, the Electron binary was not downloaded during `npm install`; `npm run dev` now fetches it automatically, or run `node node_modules/electron/install.js` by hand. Other scripts:
 
 ```bash
 npm run typecheck      # TypeScript for main + renderer
