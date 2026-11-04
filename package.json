@@ -1,0 +1,41 @@
+{
+  "name": "lyricvideo",
+  "version": "0.1.0",
+  "description": "Farsi lyric video and karaoke builder with Claude-assisted lyrics, transliteration, translation and explanations",
+  "main": "./out/main/index.js",
+  "author": "arhopkins3",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "package:mac": "electron-vite build && electron-builder --mac --dir",
+    "dist:mac": "electron-vite build && electron-builder --mac"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
+    "archiver": "^7.0.1",
+    "extract-zip": "^2.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "wavesurfer.js": "^7.8.10",
+    "zustand": "^5.0.2"
+  }
+}
