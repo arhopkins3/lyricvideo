@@ -25,7 +25,7 @@ import * as claude from './claude'
 import { beginExport, cancelExport, chooseOutput, finishExport, writeFrame } from './exporter'
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } }
+  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true } }
 ])
 
 let mainWindow: BrowserWindow | null = null
@@ -104,7 +104,9 @@ function registerMediaProtocol(): void {
           'Content-Type': mime,
           'Content-Length': String(end - start + 1),
           'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-          'Accept-Ranges': 'bytes'
+          'Accept-Ranges': 'bytes',
+          // The renderer draws this media onto canvases it later reads back (export), so it must not taint them.
+          'Access-Control-Allow-Origin': '*'
         }
       })
     }
@@ -112,6 +114,7 @@ function registerMediaProtocol(): void {
     const headers = new Headers(res.headers)
     headers.set('Content-Type', mime)
     headers.set('Accept-Ranges', 'bytes')
+    headers.set('Access-Control-Allow-Origin', '*')
     return new Response(res.body, { status: 200, headers })
   })
 }

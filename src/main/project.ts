@@ -1,8 +1,8 @@
 import { app, dialog, BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import archiver from 'archiver'
-import extractZip from 'extract-zip'
+import { ZipArchive } from 'archiver'
+import yauzl from 'yauzl'
 import { defaultStyle, newId, type Project, type ProjectHandle } from '../shared/types'
 import { getSettings, addRecentProject, updateSettings } from './settings'
 import { progress } from './events'
@@ -89,7 +89,7 @@ function zipDirectory(dir: string, target: string): Promise<void> {
     const tmp = target + '.part'
     const output = fs.createWriteStream(tmp)
     // Media is already compressed; store it rather than deflating 100MB of mp4 for no gain.
-    const archive = archiver('zip', { zlib: { level: 6 } })
+    const archive = new ZipArchive({ zlib: { level: 6 } })
     output.on('close', () => {
       fs.renameSync(tmp, target)
       resolve()
@@ -102,7 +102,7 @@ function zipDirectory(dir: string, target: string): Promise<void> {
       const stat = fs.statSync(full)
       const store = /\.(mp3|mp4|m4a|webm|jpg|jpeg|png|mkv)$/i.test(entry)
       if (stat.isDirectory()) archive.directory(full, entry)
-      else archive.file(full, { name: entry, store } as archiver.ZipEntryData)
+      else archive.file(full, { name: entry, store })
     }
     archive.finalize().catch(reject)
   })
@@ -113,7 +113,7 @@ export async function openProjectPath(filePath: string): Promise<ProjectHandle> 
   progress({ task: 'open', fraction: -1, message: 'Unpacking project…' })
   const tmpDir = path.join(projectsRoot(), `incoming-${newId()}`)
   fs.mkdirSync(tmpDir, { recursive: true })
-  await extractZip(filePath, { dir: tmpDir })
+  await extractZipSafely(filePath, tmpDir)
   const project = readProjectJson(tmpDir)
   const dir = path.join(projectsRoot(), project.id)
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
@@ -152,4 +152,44 @@ export async function chooseBackgroundImage(
   const name = `background${ext}`
   fs.copyFileSync(src, path.join(workDirFor(projectId), name))
   return name
+}
+
+/**
+ * Extract a zip into `dir`, refusing entries that would escape it and skipping symlinks.
+ * The package is user data, so it is treated as untrusted.
+ */
+export function extractZipSafely(zipPath: string, dir: string): Promise<void> {
+  const root = path.resolve(dir)
+  return new Promise((resolve, reject) => {
+    yauzl.open(zipPath, { lazyEntries: true }, (err, zip) => {
+      if (err || !zip) return reject(err ?? new Error('Could not open package'))
+      zip.on('error', reject)
+      zip.on('end', resolve)
+      zip.on('entry', (entry: yauzl.Entry) => {
+        const target = path.resolve(root, entry.fileName)
+        const isDir = entry.fileName.endsWith('/')
+        const mode = (entry.externalFileAttributes >>> 16) & 0o170000
+        const isSymlink = mode === 0o120000
+        if (!target.startsWith(root + path.sep) || isSymlink) {
+          zip.readEntry()
+          return
+        }
+        if (isDir) {
+          fs.mkdirSync(target, { recursive: true })
+          zip.readEntry()
+          return
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true })
+        zip.openReadStream(entry, (e, stream) => {
+          if (e || !stream) return reject(e ?? new Error(`Could not read ${entry.fileName}`))
+          const out = fs.createWriteStream(target)
+          stream.on('error', reject)
+          out.on('error', reject)
+          out.on('close', () => zip.readEntry())
+          stream.pipe(out)
+        })
+      })
+      zip.readEntry()
+    })
+  })
 }

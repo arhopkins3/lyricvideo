@@ -27,6 +27,7 @@ export default function Preview({ className }: { className?: string }): JSX.Elem
       return
     }
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.src = imageUrl
     img.onload = () => {
       imgRef.current = img
@@ -84,7 +85,7 @@ export default function Preview({ className }: { className?: string }): JSX.Elem
   return (
     <div className={`preview ${className ?? ''}`}>
       <canvas ref={canvasRef} />
-      {videoUrl && <video ref={videoRef} src={videoUrl} muted playsInline preload="auto" onSeeked={draw} onLoadedData={draw} style={{ display: 'none' }} />}
+      {videoUrl && <video ref={videoRef} src={videoUrl} crossOrigin="anonymous" muted playsInline preload="auto" onSeeked={draw} onLoadedData={draw} style={{ display: 'none' }} />}
     </div>
   )
 }
