@@ -47,6 +47,7 @@ The packaged app is unsigned; on first launch right-click the app and choose Ope
 3. **Translate** – one button, "Generate everything with Claude", produces the Finglish, the English, an explanation of every line, a short gloss for every word and an overview of the song, and stores all of it in the project. It only fills what is missing, so you can re-run it after editing lyrics; the "More…" menu regenerates individual parts or searches the web for published translations. Every cell is editable. A Finglish line gets per-word highlighting when it has exactly one token per Farsi word.
 4. **Align** – "Auto-align words" runs the Python aligner (faster-whisper transcription in Farsi matched to the lyric words). Then adjust:
    - drag or resize line blocks on the waveform (words scale with the line),
+   - on the word track under the waveform, drag a word to the moment it should light up, drag its edges to stretch it, ⌥-drag to move the rest of the line with it, or click it and nudge with ← → (⇧ for 10 ms steps),
    - drag word boundaries in the line strip, or set a word's start/end to the playhead,
    - **Tap mode**: play the song and hold `Enter` (or `T`) for the duration of each word (or each line), release when it ends.
    - nudge a line, or everything from a line onwards, by 0.1 s.

@@ -5,20 +5,23 @@ import TimelinePlugin from 'wavesurfer.js/dist/plugins/timeline.js'
 import { player } from '../lib/player'
 import { useStore } from '../store'
 import { hasTiming } from '../lib/timing'
-import type { Line } from '../../../shared/types'
+import type { Line, Word } from '../../../shared/types'
+import WordTrack from './WordTrack'
 
 interface Props {
   onLineTimeChange: (lineId: string, start: number, end: number) => void
+  onWordsChange: (lineId: string, words: Word[]) => void
 }
 
 /** Waveform timeline sharing the master audio element, with one draggable region per timed line. */
-export default function Waveform({ onLineTimeChange }: Props): JSX.Element {
+export default function Waveform({ onLineTimeChange, onWordsChange }: Props): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WaveSurfer | null>(null)
   const regionsRef = useRef<RegionsPlugin | null>(null)
   const regionMap = useRef(new Map<string, Region>())
-  const [zoom, setZoom] = useState(60)
+  const [zoom, setZoom] = useState(120)
   const [ready, setReady] = useState(false)
+  const [view, setView] = useState({ pxPerSec: 120, scrollLeft: 0, width: 0 })
   const handle = useStore((s) => s.handle)!
   const lines = handle.project.lines
   const selectedLineId = useStore((s) => s.selectedLineId)
@@ -43,10 +46,26 @@ export default function Waveform({ onLineTimeChange }: Props): JSX.Element {
       autoCenter: false,
       plugins: [regions, TimelinePlugin.create({ height: 18, timeInterval: 1, primaryLabelInterval: 5, style: { color: '#8aa0b8', fontSize: '10px' } })]
     })
-    ws.on('ready', () => setReady(true))
-    ws.on('click', () => {
-      /* wavesurfer seeks the shared media itself */
+    const syncView = () => {
+      const duration = ws.getDuration()
+      const wrapper = ws.getWrapper()
+      if (!duration || !wrapper) return
+      const scroller = wrapper.parentElement
+      setView({
+        pxPerSec: wrapper.clientWidth / duration,
+        scrollLeft: scroller ? scroller.scrollLeft : ws.getScroll(),
+        width: scroller ? scroller.clientWidth : wrapper.clientWidth
+      })
+    }
+    ws.on('ready', () => {
+      setReady(true)
+      syncView()
     })
+    ws.on('redrawcomplete', syncView)
+    ws.on('zoom', () => requestAnimationFrame(syncView))
+    ws.on('scroll', syncView)
+    const ro = new ResizeObserver(syncView)
+    ro.observe(containerRef.current)
     regions.on('region-updated', (r) => {
       onChangeRef.current(r.id, r.start, r.end)
     })
@@ -58,6 +77,7 @@ export default function Waveform({ onLineTimeChange }: Props): JSX.Element {
     wsRef.current = ws
     regionsRef.current = regions
     return () => {
+      ro.disconnect()
       ws.destroy()
       wsRef.current = null
       regionsRef.current = null
@@ -104,10 +124,23 @@ export default function Waveform({ onLineTimeChange }: Props): JSX.Element {
   return (
     <div className="waveform">
       <div ref={containerRef} className="waveform-canvas" />
+      {ready && view.width > 0 && (
+        <WordTrack
+          lines={lines}
+          pxPerSec={view.pxPerSec}
+          scrollLeft={view.scrollLeft}
+          viewWidth={view.width}
+          selectedLineId={selectedLineId}
+          onSelectLine={selectLine}
+          onWordsChange={onWordsChange}
+        />
+      )}
       <div className="row waveform-tools">
         <span className="muted small">Zoom</span>
-        <input type="range" min={20} max={400} value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))} />
-        <span className="muted small">Drag a block to move a line, drag its edges to resize. Click a block to select it.</span>
+        <input type="range" min={20} max={600} value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))} />
+        <span className="muted small">
+          Lines: drag a block to move it, drag its edges to resize. Words (lower track): drag to slide, ⌥-drag to slide the rest of the line with it, drag an edge to stretch, click then ← → to nudge (⇧ for fine steps).
+        </span>
       </div>
     </div>
   )

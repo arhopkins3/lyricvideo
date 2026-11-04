@@ -351,7 +351,7 @@ export default function StepAlign(): JSX.Element {
         )}
       </div>
 
-      <Waveform onLineTimeChange={onLineTimeChange} />
+      <Waveform onLineTimeChange={onLineTimeChange} onWordsChange={setWords} />
 
       {selected ? (
         <WordTimeline line={selected} onChange={(words) => setWords(selected.id, words)} />
